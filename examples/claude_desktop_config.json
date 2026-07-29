@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "faircom-mcp-demo": {
+      "command": "/usr/local/bin/docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-e",
+        "FAIRCOM_API_BASE_URL=http://host.docker.internal:8080/api",
+        "-e",
+        "FAIRCOM_API_USERNAME=ADMIN",
+        "-e",
+        "FAIRCOM_API_PASSWORD=ADMIN",
+        "-e",
+        "NO_COLOR=1",
+        "faircomteam/faircom-mcp:latest",
+        "--transport",
+        "stdio"
+      ]
+    }
+  }
+}

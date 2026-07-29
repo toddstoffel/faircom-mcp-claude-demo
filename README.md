@@ -33,26 +33,29 @@ Business value for demos:
 - Docker Desktop (or Docker Engine + Compose)
 - Claude Desktop
 - curl
-- Bash (macOS/Linux) or Git Bash/WSL2 on Windows
+- Bash (macOS/Linux) or PowerShell 5+/7 on Windows
+- Windows users should run the demo with PowerShell via demo.cmd or demo.ps1 rather than relying on WSL or Git Bash
 
 ## Quick Start
 
 1. Start services and seed data.
 
-```bash
+```powershell
 # macOS/Linux
 ./demo.sh
 
-# Windows (Git Bash or WSL2)
-bash ./demo.sh
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File .\demo.ps1
+# or
+./demo.cmd
 ```
 
 2. Configure Claude Desktop using one of the example files in the examples folder:
-   - examples/claude_desktop_config.sample.json
-   - examples/claude_desktop_auto_approve.sample.json
-   - examples/claude_desktop_full.sample.json
+   - examples/claude_desktop_config.json
+   - examples/claude_desktop_auto_approve.json
+   - examples/claude_desktop_full.json
 
-   Windows users should copy the relevant example into their Claude config location at %APPDATA%\Claude\claude_desktop_config.json (or the equivalent AppData\Roaming\Claude path) and update any placeholder values before launching Claude Desktop.
+   Windows users should copy the relevant example into their Claude config location at %APPDATA%\Claude\claude_desktop_config.json (or the equivalent AppData\Roaming\Claude path) and update any placeholder values before launching Claude Desktop. The repo also includes Windows-friendly launchers in demo.cmd and demo.ps1 so the demo can be started without relying on WSL or Git Bash.
 
 3. Fully quit and reopen Claude Desktop.
 
@@ -74,12 +77,19 @@ bash ./demo.sh
 ./demo.sh --stop
 ./demo.sh --status
 
-# Windows (Git Bash or WSL2)
-bash ./demo.sh
-bash ./demo.sh --setup
-bash ./demo.sh --seed
-bash ./demo.sh --stop
-bash ./demo.sh --status
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File .\demo.ps1
+powershell -ExecutionPolicy Bypass -File .\demo.ps1 --setup
+powershell -ExecutionPolicy Bypass -File .\demo.ps1 --seed
+powershell -ExecutionPolicy Bypass -File .\demo.ps1 --stop
+powershell -ExecutionPolicy Bypass -File .\demo.ps1 --status
+
+# or use the wrapper batch file
+./demo.cmd
+./demo.cmd --setup
+./demo.cmd --seed
+./demo.cmd --stop
+./demo.cmd --status
 ```
 
 ### Seeded Tables
@@ -145,15 +155,15 @@ claude_desktop_config.json
 
 Use these files as the starting point for your Claude Desktop config:
 
-- examples/claude_desktop_config.sample.json
+- examples/claude_desktop_config.json
   - Required MCP server configuration only.
   - Best for a minimal setup.
 
-- examples/claude_desktop_auto_approve.sample.json
+- examples/claude_desktop_auto_approve.json
   - Optional preferences block for permission-bypass and model fallback mappings.
   - Includes multiple account UUID placeholders because some environments can use more than one account or org identifier.
 
-- examples/claude_desktop_full.sample.json
+- examples/claude_desktop_full.json
   - Single-file combined example: MCP server + optional preferences.
   - Best for Windows users who want one ready-to-merge configuration file.
 
@@ -208,11 +218,13 @@ In Claude logs, we consistently observed:
 
 ## Repo Contents
 
-- demo.sh: Setup and seed automation
+- demo.sh: Setup and seed automation for macOS/Linux
+- demo.ps1: PowerShell entrypoint for Windows
+- demo.cmd: Windows Command Prompt launcher for demo.ps1
 - docker-compose.yml: FairCom Edge and FairCom MCP services
-- examples/claude_desktop_config.sample.json: MCP server config sample
-- examples/claude_desktop_auto_approve.sample.json: Optional preference mappings
-- examples/claude_desktop_full.sample.json: Combined sample
+- examples/claude_desktop_config.json: MCP server config sample
+- examples/claude_desktop_auto_approve.json: Optional preference mappings
+- examples/claude_desktop_full.json: Combined sample
 - comparison/checklist.md: Comparison checklist
 - comparison/results-template.md: Comparison output template
 
