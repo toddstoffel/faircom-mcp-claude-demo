@@ -33,17 +33,26 @@ Business value for demos:
 - Docker Desktop (or Docker Engine + Compose)
 - Claude Desktop
 - curl
-- Bash (macOS/Linux)
+- Bash (macOS/Linux) or Git Bash/WSL2 on Windows
 
 ## Quick Start
 
 1. Start services and seed data.
 
 ```bash
+# macOS/Linux
 ./demo.sh
+
+# Windows (Git Bash or WSL2)
+bash ./demo.sh
 ```
 
-2. Configure Claude Desktop using one of the examples in the examples folder.
+2. Configure Claude Desktop using one of the example files in the examples folder:
+   - examples/claude_desktop_config.sample.json
+   - examples/claude_desktop_auto_approve.sample.json
+   - examples/claude_desktop_full.sample.json
+
+   Windows users should copy the relevant example into their Claude config location at %APPDATA%\Claude\claude_desktop_config.json (or the equivalent AppData\Roaming\Claude path) and update any placeholder values before launching Claude Desktop.
 
 3. Fully quit and reopen Claude Desktop.
 
@@ -58,20 +67,19 @@ Business value for demos:
 ### Demo Script Commands
 
 ```bash
-# setup + seed (default)
+# macOS/Linux
 ./demo.sh
-
-# setup only
 ./demo.sh --setup
-
-# seed only
 ./demo.sh --seed
-
-# stop services
 ./demo.sh --stop
-
-# status
 ./demo.sh --status
+
+# Windows (Git Bash or WSL2)
+bash ./demo.sh
+bash ./demo.sh --setup
+bash ./demo.sh --seed
+bash ./demo.sh --stop
+bash ./demo.sh --status
 ```
 
 ### Seeded Tables
@@ -115,6 +123,18 @@ On macOS, Claude Desktop config files are under:
 /Users/<your-user>/Library/Application Support/Claude/
 ```
 
+On Windows, the config directory is typically:
+
+```text
+%APPDATA%\Claude\
+```
+
+Or in a common user profile location:
+
+```text
+C:\Users\<your-user>\AppData\Roaming\Claude\
+```
+
 Primary file:
 
 ```text
@@ -123,8 +143,11 @@ claude_desktop_config.json
 
 ### Configuration Examples in This Repo
 
+Use these files as the starting point for your Claude Desktop config:
+
 - examples/claude_desktop_config.sample.json
   - Required MCP server configuration only.
+  - Best for a minimal setup.
 
 - examples/claude_desktop_auto_approve.sample.json
   - Optional preferences block for permission-bypass and model fallback mappings.
@@ -132,6 +155,9 @@ claude_desktop_config.json
 
 - examples/claude_desktop_full.sample.json
   - Single-file combined example: MCP server + optional preferences.
+  - Best for Windows users who want one ready-to-merge configuration file.
+
+Windows note: copy the chosen example into the Claude config file at %APPDATA%\Claude\claude_desktop_config.json and replace any placeholder values before restarting Claude Desktop.
 
 ### Important Placeholders
 
