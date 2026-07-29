@@ -148,11 +148,13 @@ Which usually resolves to:
 C:\Users\<your-user>\AppData\Roaming\Claude\
 ```
 
-For MSIX/Store-style installs, Windows can virtualize this location to a package-specific path such as:
+For MSIX/Store-style installs, Windows can virtualize this location to a package-specific path under LocalAppData\Packages, for example:
 
 ```text
-C:\Users\<your-user>\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\
+C:\Users\<your-user>\AppData\Local\Packages\<package-family-name>\LocalCache\Roaming\Claude\
 ```
+
+The package-family-name value varies by install channel and version. Use Settings > Developer > Edit Config to open the exact active path used by your running Claude Desktop instance.
 
 Use Edit Config instead of guessing paths.
 
