@@ -51,11 +51,12 @@ powershell -ExecutionPolicy Bypass -File .\demo.ps1
 ```
 
 2. Configure Claude Desktop using one of the example files in the examples folder:
-   - examples/claude_desktop_config.json
+  - examples/linux-mac/claude_desktop_config.json
    - examples/claude_desktop_auto_approve.json
    - examples/claude_desktop_full.json
+  - examples/windows/claude_desktop_config.json
 
-   Windows users should copy the relevant example into their Claude config location at %APPDATA%\Claude\claude_desktop_config.json (or the equivalent AppData\Roaming\Claude path) and update any placeholder values before launching Claude Desktop. The repo also includes Windows-friendly launchers in demo.cmd and demo.ps1 so the demo can be started without relying on WSL or Git Bash.
+  On Windows, use Claude Desktop Settings > Developer > Edit Config to open the exact config file used by your running install, then paste your chosen example content into that file. Save it with the exact filename claude_desktop_config.json, replace placeholders, then fully quit Claude from the system tray and relaunch. The repo also includes Windows-friendly launchers in demo.cmd and demo.ps1 so the demo can be started without relying on WSL or Git Bash.
 
 3. Fully quit and reopen Claude Desktop.
 
@@ -127,23 +128,33 @@ ASSETS_COUNT=300 RECORD_COUNT=20000 WORK_ORDERS_COUNT=5000 MAINT_EVENTS_COUNT=70
 
 ## Claude Desktop Configuration
 
+Start with Claude Desktop Settings > Developer > Edit Config. This opens the actual config path used by the running app instance and avoids install-type path confusion.
+
 On macOS, Claude Desktop config files are under:
 
 ```text
 /Users/<your-user>/Library/Application Support/Claude/
 ```
 
-On Windows, the config directory is typically:
+On Windows, traditional installs commonly use:
 
 ```text
 %APPDATA%\Claude\
 ```
 
-Or in a common user profile location:
+Which usually resolves to:
 
 ```text
 C:\Users\<your-user>\AppData\Roaming\Claude\
 ```
+
+For MSIX/Store-style installs, Windows can virtualize this location to a package-specific path such as:
+
+```text
+C:\Users\<your-user>\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\
+```
+
+Use Edit Config instead of guessing paths.
 
 Primary file:
 
@@ -153,21 +164,96 @@ claude_desktop_config.json
 
 ### Configuration Examples in This Repo
 
-Use these files as the starting point for your Claude Desktop config:
+Use these files as starting points for your Claude Desktop config. Each file has a different purpose.
 
-- examples/claude_desktop_config.json
-  - Required MCP server configuration only.
-  - Best for a minimal setup.
+Recommended selection order:
+
+1. Windows users: start with examples/windows/claude_desktop_config.json.
+2. Linux/macOS users: start with examples/linux-mac/claude_desktop_config.json.
+3. Add preferences from examples/claude_desktop_auto_approve.json only if you need account-level behavior settings.
+4. Use examples/claude_desktop_full.json only as a reference for a combined structure.
+
+#### Example File Purpose and When to Use It
+
+- examples/linux-mac/claude_desktop_config.json
+  - Contains mcpServers only.
+  - Uses command: docker and expects docker to resolve from PATH.
+  - Use for Linux/macOS, or any environment where docker is reliably on PATH.
 
 - examples/claude_desktop_auto_approve.json
-  - Optional preferences block for permission-bypass and model fallback mappings.
+  - Contains preferences only.
+  - Does not define mcpServers and will not start a connector by itself.
+  - Use when you already have an MCP config and want optional account-based preference mappings.
   - Includes multiple account UUID placeholders because some environments can use more than one account or org identifier.
 
 - examples/claude_desktop_full.json
-  - Single-file combined example: MCP server + optional preferences.
-  - Best for Windows users who want one ready-to-merge configuration file.
+  - Contains both mcpServers and preferences in one file.
+  - Uses command: docker (PATH-based), so it may require edits on Windows if Claude cannot resolve docker.
+  - Use as a combined reference template, especially for understanding final JSON shape.
 
-Windows note: copy the chosen example into the Claude config file at %APPDATA%\Claude\claude_desktop_config.json and replace any placeholder values before restarting Claude Desktop.
+- examples/windows/claude_desktop_config.json
+  - Contains mcpServers only.
+  - Uses an absolute docker.exe path for Windows.
+  - Use as the default Windows connector template to avoid PATH resolution failures in Claude Desktop.
+
+#### How to Apply These Examples Correctly
+
+Claude Desktop reads one primary config file named claude_desktop_config.json. It does not auto-load these repo filenames directly.
+
+Use this process:
+
+1. Open Claude Desktop and go to Settings > Developer > Edit Config.
+2. Replace or merge content from the example file into that opened config file.
+3. Keep valid JSON with one top-level object. Do not paste multiple separate JSON documents.
+4. If combining MCP + preferences manually, final shape should look like this:
+
+```json
+{
+  "mcpServers": {
+    "faircom-mcp-demo": {
+      "command": "...",
+      "args": ["..."]
+    }
+  },
+  "preferences": {
+    "bypassPermissionsGateByAccount": {
+      "YOUR_ACCOUNT_UUID_PRIMARY": true
+    },
+    "coworkModelAutoFallbackByAccount": {
+      "YOUR_ACCOUNT_UUID_PRIMARY": true
+    }
+  }
+}
+```
+
+5. Save, fully quit Claude from the system tray, then relaunch.
+
+#### Common Misconfiguration Patterns
+
+- Using examples/claude_desktop_auto_approve.json alone and expecting connector startup.
+- Keeping example filename instead of applying content to Claude's active claude_desktop_config.json.
+- Using command: docker on Windows when Claude cannot resolve PATH.
+- Closing Claude window without fully exiting from tray after config edits.
+
+Windows note: ensure the file name is exactly claude_desktop_config.json. Claude does not auto-load alternate names like claude_desktop_full.json.
+
+### Windows Connector Not Found Troubleshooting
+
+If Claude Desktop on Windows does not show the faircom-mcp-demo connector, check these in order:
+
+1. In Claude Desktop, open Settings > Developer > Edit Config and use that file. Do not assume %APPDATA% is the active path for MSIX installs.
+2. Confirm filename is exact: claude_desktop_config.json.
+3. Use examples/windows/claude_desktop_config.json first. It uses an absolute docker.exe path that avoids PATH resolution issues in some Windows installs.
+4. Verify docker path exists:
+  - C:\Program Files\Docker\Docker\resources\bin\docker.exe
+  - If your install differs, update command to your actual docker.exe path.
+5. Ensure the config is valid JSON (no comments, no trailing commas).
+6. Fully quit Claude Desktop from the system tray, then relaunch.
+7. If still missing, run in PowerShell and verify:
+  - Test-Path "$env:APPDATA\Claude\claude_desktop_config.json"
+  - Get-ChildItem "$env:LOCALAPPDATA\Packages" -Directory | Where-Object { $_.Name -match "Claude|Anthropic" }
+  - Test-Path "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+8. If the connector still does not appear, inspect Claude logs next to the active config path for per-server launch logs (for example mcp-server-faircom-mcp-demo.log).
 
 ### Important Placeholders
 
@@ -222,9 +308,10 @@ In Claude logs, we consistently observed:
 - demo.ps1: PowerShell entrypoint for Windows
 - demo.cmd: Windows Command Prompt launcher for demo.ps1
 - docker-compose.yml: FairCom Edge and FairCom MCP services
-- examples/claude_desktop_config.json: MCP server config sample
+- examples/linux-mac/claude_desktop_config.json: Linux/macOS MCP server config sample
 - examples/claude_desktop_auto_approve.json: Optional preference mappings
 - examples/claude_desktop_full.json: Combined sample
+- examples/windows/claude_desktop_config.json: Windows docker.exe-path sample
 - comparison/checklist.md: Comparison checklist
 - comparison/results-template.md: Comparison output template
 

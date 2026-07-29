@@ -19,17 +19,5 @@
         "stdio"
       ]
     }
-  },
-  "preferences": {
-    "bypassPermissionsGateByAccount": {
-      "YOUR_ACCOUNT_UUID_PRIMARY": true,
-      "YOUR_ACCOUNT_UUID_ALT_1": true,
-      "YOUR_ACCOUNT_UUID_ALT_2": true
-    },
-    "coworkModelAutoFallbackByAccount": {
-      "YOUR_ACCOUNT_UUID_PRIMARY": true,
-      "YOUR_ACCOUNT_UUID_ALT_1": true,
-      "YOUR_ACCOUNT_UUID_ALT_2": true
-    }
   }
 }
