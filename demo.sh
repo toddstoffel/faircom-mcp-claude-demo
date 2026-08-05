@@ -11,6 +11,7 @@ EDGE_USERNAME="${EDGE_USERNAME:-ADMIN}"
 EDGE_PASSWORD="${EDGE_PASSWORD:-ADMIN}"
 EDGE_DATABASE="${EDGE_DATABASE:-faircom}"
 EDGE_OWNER="${EDGE_OWNER:-admin}"
+ENABLE_MODBUS_SIM="${ENABLE_MODBUS_SIM:-0}"
 
 DEMO_TABLE_ASSETS="demo_assets"
 DEMO_TABLE_READINGS="demo_sensor_readings"
@@ -187,6 +188,25 @@ wait_for_http() {
   die "$name did not become ready in time: $url"
 }
 
+wait_for_tcp() {
+  local name="$1"
+  local host="$2"
+  local port="$3"
+  local max_attempts="$4"
+  local attempt=1
+
+  while [ "$attempt" -le "$max_attempts" ]; do
+    if (echo >"/dev/tcp/$host/$port") >/dev/null 2>&1; then
+      log "$name is ready"
+      return 0
+    fi
+    sleep 2
+    attempt=$((attempt + 1))
+  done
+
+  die "$name did not become ready in time: $host:$port"
+}
+
 seed_data() {
   local session_response auth_token list_tables_response create_table_response delete_table_response
   local create_table_code delete_table_code
@@ -295,11 +315,21 @@ cmd_setup() {
   require_cmd docker
   require_cmd curl
 
-  log "Starting FairCom Edge and FairCom MCP containers"
-  docker compose up -d
+  if [ "$ENABLE_MODBUS_SIM" = "1" ]; then
+    log "Starting FairCom Edge, FairCom MCP, and optional Modbus simulator containers"
+    COMPOSE_PROFILES=modbus-sim docker compose up -d
+  else
+    log "Starting FairCom Edge and FairCom MCP containers"
+    docker compose up -d
+  fi
 
   wait_for_http "FairCom Edge" "$EDGE_HTTP_URL" 90
   wait_for_http "FairCom MCP" "$MCP_BASE_URL/health" 90
+
+  if [ "$ENABLE_MODBUS_SIM" = "1" ]; then
+    wait_for_tcp "Modbus simulator" "127.0.0.1" "1502" 45
+    log "Modbus simulator endpoint: localhost:1502 (Docker network: modbus-sim:1502)"
+  fi
 }
 
 cmd_seed() {
@@ -315,34 +345,50 @@ cmd_seed() {
 
 cmd_start() {
   cmd_setup
+  log "Environment is ready"
+}
+
+cmd_start_with_seed() {
+  cmd_setup
   cmd_seed
-  log "Environment is ready for Claude Desktop"
+  log "Environment is ready with sample ERP dataset"
 }
 
 cmd_stop() {
   require_cmd docker
   log "Stopping containers"
   docker compose down --remove-orphans
+  COMPOSE_PROFILES=modbus-sim docker compose down --remove-orphans >/dev/null 2>&1 || true
 }
 
 cmd_status() {
   require_cmd docker
-  docker compose ps
+  COMPOSE_PROFILES=modbus-sim docker compose ps
 }
 
 usage() {
   cat <<EOF
-Usage: ./demo.sh [--setup|--seed|--stop|--status|--help]
+Usage: ./demo.sh [--modbus] [--seed] [--setup|--stop|--status|--help]
 
 Default:
-  --setup + --seed
+  setup only (no sample ERP seed)
 
 Options:
   --setup   Start Docker services and wait for readiness
-  --seed    Create and seed demo tables only
+  --modbus  Include Modbus simulator in startup
+  --seed    Load sample ERP dataset tables after setup
   --stop    Stop Docker services
   --status  Show Docker service status
   --help    Show this help
+
+Simple rule:
+  default = setup only
+  --seed = setup + sample ERP dataset
+  --modbus = setup + Modbus simulator
+  --modbus --seed = setup + Modbus simulator + sample ERP dataset
+
+Advanced:
+  ./demo.sh --seed-only    # load sample ERP dataset into already-running Edge only
 
 Environment overrides:
   EDGE_JSON_API_URL=http://127.0.0.1:8080/api
@@ -352,6 +398,7 @@ Environment overrides:
   EDGE_PASSWORD=ADMIN
   EDGE_DATABASE=faircom
   EDGE_OWNER=admin
+  ENABLE_MODBUS_SIM=0
   ASSETS_COUNT=120
   RECORD_COUNT=6000
   WORK_ORDERS_COUNT=1800
@@ -360,15 +407,61 @@ EOF
 }
 
 main() {
-  local opt="${1:-}"
-  case "$opt" in
-    "" ) cmd_start ;;
-    --setup ) cmd_setup ;;
-    --seed ) cmd_seed ;;
-    --stop ) cmd_stop ;;
-    --status ) cmd_status ;;
-    --help|-h ) usage ;;
-    * ) usage; exit 1 ;;
+  local do_seed=0
+  local mode="start"
+  local arg
+
+  for arg in "$@"; do
+    case "$arg" in
+      --setup)
+        :
+        ;;
+      --modbus)
+        ENABLE_MODBUS_SIM=1
+        ;;
+      --seed)
+        do_seed=1
+        ;;
+      --seed-only)
+        mode="seed-only"
+        ;;
+      --with-modbus|--start-with-modbus)
+        ENABLE_MODBUS_SIM=1
+        do_seed=1
+        ;;
+      --setup-with-modbus|--setup-only-with-modbus)
+        ENABLE_MODBUS_SIM=1
+        :
+        ;;
+      --stop)
+        mode="stop"
+        ;;
+      --status)
+        mode="status"
+        ;;
+      --help|-h)
+        mode="help"
+        ;;
+      *)
+        usage
+        exit 1
+        ;;
+    esac
+  done
+
+  case "$mode" in
+    stop) cmd_stop ;;
+    status) cmd_status ;;
+    help) usage ;;
+    seed-only) cmd_seed ;;
+    start)
+      if [ "$do_seed" = "1" ]; then
+        cmd_start_with_seed
+      else
+        cmd_start
+      fi
+      ;;
+    *) usage; exit 1 ;;
   esac
 }
 

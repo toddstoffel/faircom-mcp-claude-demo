@@ -28,5 +28,30 @@ services:
       FAIRCOM_HTTP_PORT: 8000
     command: ["--transport", "http"]
 
+  modbus-sim:
+    image: python:3.12-alpine
+    container_name: modbus-sim
+    restart: unless-stopped
+    profiles:
+      - modbus-sim
+    ports:
+      - "1502:1502"
+    volumes:
+      - ./modbus-sim:/app:ro
+    command:
+      - sh
+      - -c
+      - pip install --no-cache-dir pymodbus==3.8.3 && python /app/modbus_telemetry_simulator.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import socket; s=socket.socket(); s.settimeout(1); s.connect(("127.0.0.1", 1502)); s.close()
+      interval: 10s
+      timeout: 3s
+      retries: 8
+      start_period: 10s
+
 volumes:
   faircom-edge-data:

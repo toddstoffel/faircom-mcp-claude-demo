@@ -12,6 +12,7 @@ $EdgeUsername = if ($env:EDGE_USERNAME) { $env:EDGE_USERNAME } else { 'ADMIN' }
 $EdgePassword = if ($env:EDGE_PASSWORD) { $env:EDGE_PASSWORD } else { 'ADMIN' }
 $EdgeDatabase = if ($env:EDGE_DATABASE) { $env:EDGE_DATABASE } else { 'faircom' }
 $EdgeOwner = if ($env:EDGE_OWNER) { $env:EDGE_OWNER } else { 'admin' }
+$EnableModbusSim = if ($env:ENABLE_MODBUS_SIM) { [int]$env:ENABLE_MODBUS_SIM } else { 0 }
 
 $DemoTableAssets = 'demo_assets'
 $DemoTableReadings = 'demo_sensor_readings'
@@ -247,6 +248,29 @@ function Wait-For-Http([string]$Name, [string]$Url, [int]$MaxAttempts) {
   Fail "$Name did not become ready in time: $Url"
 }
 
+function Wait-For-Tcp([string]$Name, [string]$Host, [int]$Port, [int]$MaxAttempts) {
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+    $client = $null
+    try {
+      $client = [System.Net.Sockets.TcpClient]::new()
+      $result = $client.BeginConnect($Host, $Port, $null, $null)
+      if ($result.AsyncWaitHandle.WaitOne(1000) -and $client.Connected) {
+        $client.EndConnect($result)
+        Write-Log "$Name is ready"
+        return
+      }
+    } catch {
+    } finally {
+      if ($null -ne $client) {
+        $client.Dispose()
+      }
+    }
+    Start-Sleep -Seconds 2
+  }
+
+  Fail "$Name did not become ready in time: ${Host}:${Port}"
+}
+
 function Seed-Data {
   $sessionResponse = Invoke-ApiJson (@{
     api = 'admin'
@@ -360,11 +384,23 @@ function Seed-Data {
 function Cmd-Setup {
   Assert-Command docker
 
-  Write-Log 'Starting FairCom Edge and FairCom MCP containers'
-  & docker compose up -d
+  if ($EnableModbusSim -eq 1) {
+    Write-Log 'Starting FairCom Edge, FairCom MCP, and optional Modbus simulator containers'
+    $env:COMPOSE_PROFILES = 'modbus-sim'
+    & docker compose up -d
+    Remove-Item Env:COMPOSE_PROFILES -ErrorAction SilentlyContinue
+  } else {
+    Write-Log 'Starting FairCom Edge and FairCom MCP containers'
+    & docker compose up -d
+  }
 
   Wait-For-Http 'FairCom Edge' "$EdgeHttpUrl" 90
   Wait-For-Http 'FairCom MCP' "$McpBaseUrl/health" 90
+
+  if ($EnableModbusSim -eq 1) {
+    Wait-For-Tcp 'Modbus simulator' '127.0.0.1' 1502 45
+    Write-Log 'Modbus simulator endpoint: localhost:1502 (Docker network: modbus-sim:1502)'
+  }
 }
 
 function Cmd-Seed {
@@ -375,34 +411,54 @@ function Cmd-Seed {
 
 function Cmd-Start {
   Cmd-Setup
+  Write-Log 'Environment is ready'
+}
+
+function Cmd-StartWithSeed {
+  Cmd-Setup
   Cmd-Seed
-  Write-Log 'Environment is ready for Claude Desktop'
+  Write-Log 'Environment is ready with sample ERP dataset'
 }
 
 function Cmd-Stop {
   Assert-Command docker
   Write-Log 'Stopping containers'
   & docker compose down --remove-orphans
+  $env:COMPOSE_PROFILES = 'modbus-sim'
+  & docker compose down --remove-orphans | Out-Null
+  Remove-Item Env:COMPOSE_PROFILES -ErrorAction SilentlyContinue
 }
 
 function Cmd-Status {
   Assert-Command docker
+  $env:COMPOSE_PROFILES = 'modbus-sim'
   & docker compose ps
+  Remove-Item Env:COMPOSE_PROFILES -ErrorAction SilentlyContinue
 }
 
 function Show-Usage {
   Write-Host @"
-Usage: ./demo.ps1 [--setup|--seed|--stop|--status|--help]
+Usage: ./demo.ps1 [--modbus] [--seed] [--setup|--stop|--status|--help]
 
 Default:
-  --setup + --seed
+  setup only (no sample ERP seed)
 
 Options:
   --setup   Start Docker services and wait for readiness
-  --seed    Create and seed demo tables only
+  --modbus  Include Modbus simulator in startup
+  --seed    Load sample ERP dataset tables after setup
   --stop    Stop Docker services
   --status  Show Docker service status
   --help    Show this help
+
+Simple rule:
+  default = setup only
+  --seed = setup + sample ERP dataset
+  --modbus = setup + Modbus simulator
+  --modbus --seed = setup + Modbus simulator + sample ERP dataset
+
+Advanced:
+  ./demo.ps1 --seed-only    # load sample ERP dataset into already-running Edge only
 
 Environment overrides:
   EDGE_JSON_API_URL=http://127.0.0.1:8080/api
@@ -412,6 +468,7 @@ Environment overrides:
   EDGE_PASSWORD=ADMIN
   EDGE_DATABASE=faircom
   EDGE_OWNER=admin
+  ENABLE_MODBUS_SIM=0
   ASSETS_COUNT=120
   RECORD_COUNT=6000
   WORK_ORDERS_COUNT=1800
@@ -419,15 +476,38 @@ Environment overrides:
 "@
 }
 
-$opt = if ($args.Length -gt 0) { $args[0] } else { '' }
+$mode = 'start'
+$doSeed = $false
 
-switch ($opt) {
-  '' { Cmd-Start }
-  '--setup' { Cmd-Setup }
-  '--seed' { Cmd-Seed }
-  '--stop' { Cmd-Stop }
-  '--status' { Cmd-Status }
-  '--help' { Show-Usage }
-  '-h' { Show-Usage }
+foreach ($arg in $args) {
+  switch ($arg) {
+    '--setup' { }
+    '--modbus' { $EnableModbusSim = 1 }
+    '--seed' { $doSeed = $true }
+    '--seed-only' { $mode = 'seed-only' }
+    '--setup-with-modbus' { $EnableModbusSim = 1 }
+    '--setup-only-with-modbus' { $EnableModbusSim = 1 }
+    '--with-modbus' { $EnableModbusSim = 1; $doSeed = $true }
+    '--start-with-modbus' { $EnableModbusSim = 1; $doSeed = $true }
+    '--stop' { $mode = 'stop' }
+    '--status' { $mode = 'status' }
+    '--help' { $mode = 'help' }
+    '-h' { $mode = 'help' }
+    default { Show-Usage; exit 1 }
+  }
+}
+
+switch ($mode) {
+  'start' {
+    if ($doSeed) {
+      Cmd-StartWithSeed
+    } else {
+      Cmd-Start
+    }
+  }
+  'seed-only' { Cmd-Seed }
+  'stop' { Cmd-Stop }
+  'status' { Cmd-Status }
+  'help' { Show-Usage }
   default { Show-Usage; exit 1 }
 }

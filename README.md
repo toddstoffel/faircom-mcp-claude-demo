@@ -12,7 +12,8 @@ FairCom MCP Demo helps teams prove that FairCom Edge data can be explored from C
 
 What this demo highlights:
 - Fast local startup and teardown
-- Realistic seeded data for meaningful questions
+- Realistic sample ERP data for meaningful questions
+- Optional Modbus TCP simulator for connector and transform experiments
 - MCP tool-based workflows for discovery and query
 - A practical comparison path versus other MCP servers
 
@@ -24,7 +25,8 @@ Business value for demos:
 ## What Is Included
 
 - Docker Compose runtime for FairCom Edge and FairCom MCP
-- Seed automation for demo tables and realistic record volumes
+- Optional Docker Compose profile for a simulated Modbus TCP telemetry source
+- Sample ERP dataset loader for demo tables and realistic record volumes
 - Claude Desktop config examples for MCP and auto-approve preferences
 - Comparison templates in the comparison folder
 
@@ -38,7 +40,7 @@ Business value for demos:
 
 ## Quick Start
 
-1. Start services and seed data.
+1. Start services (no sample ERP seed by default).
 
 ```powershell
 # macOS/Linux
@@ -66,6 +68,10 @@ powershell -ExecutionPolicy Bypass -File .\demo.ps1
 - Count rows in demo_sensor_readings.
 - Show top 10 alert readings ordered by temperature.
 
+Optional: include `--seed` during startup if you want the sample ERP dataset tables loaded.
+
+Default startup does not configure Modbus data ingestion into FairCom Edge. That connector setup is intentionally left to MCP-driven configuration steps.
+
 ## Usage Instructions
 
 ### Demo Script Commands
@@ -74,26 +80,32 @@ powershell -ExecutionPolicy Bypass -File .\demo.ps1
 # macOS/Linux
 ./demo.sh
 ./demo.sh --setup
-./demo.sh --seed
+./demo.sh --seed          # setup + sample ERP dataset
+./demo.sh --modbus --seed # setup + modbus + sample ERP dataset
 ./demo.sh --stop
 ./demo.sh --status
+./demo.sh --modbus
 
 # Windows (PowerShell)
 powershell -ExecutionPolicy Bypass -File .\demo.ps1
 powershell -ExecutionPolicy Bypass -File .\demo.ps1 --setup
 powershell -ExecutionPolicy Bypass -File .\demo.ps1 --seed
+powershell -ExecutionPolicy Bypass -File .\demo.ps1 --modbus --seed
 powershell -ExecutionPolicy Bypass -File .\demo.ps1 --stop
 powershell -ExecutionPolicy Bypass -File .\demo.ps1 --status
+powershell -ExecutionPolicy Bypass -File .\demo.ps1 --modbus
 
 # or use the wrapper batch file
 ./demo.cmd
 ./demo.cmd --setup
 ./demo.cmd --seed
+./demo.cmd --modbus --seed
 ./demo.cmd --stop
 ./demo.cmd --status
+./demo.cmd --modbus
 ```
 
-### Seeded Tables
+### Sample ERP Dataset Tables
 
 - demo_assets
 - demo_sensor_readings
@@ -121,10 +133,89 @@ ASSETS_COUNT=300 RECORD_COUNT=20000 WORK_ORDERS_COUNT=5000 MAINT_EVENTS_COUNT=70
 - EDGE_PASSWORD (default: ADMIN)
 - EDGE_DATABASE (default: faircom)
 - EDGE_OWNER (default: admin)
+- ENABLE_MODBUS_SIM (default: 0)
+- MODBUS_SIM_PORT (default: 1502)
+- MODBUS_SIM_UNIT_ID (default: 1)
+- MODBUS_SIM_ASSET_COUNT (default: 8)
+- MODBUS_SIM_REGISTER_COUNT (default: MODBUS_SIM_ASSET_COUNT x 12)
+- MODBUS_SIM_UPDATE_SECONDS (default: 1.0)
 - ASSETS_COUNT (default: 120)
 - RECORD_COUNT (default: 6000)
 - WORK_ORDERS_COUNT (default: 1800)
 - MAINT_EVENTS_COUNT (default: 2400)
+
+### Optional Modbus Simulator
+
+Use one of these commands when you want a local Modbus endpoint for FairCom Edge connector testing:
+
+```bash
+./demo.sh --modbus
+# include sample ERP dataset tables
+./demo.sh --modbus --seed
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\demo.ps1 --modbus
+# include sample ERP dataset tables
+powershell -ExecutionPolicy Bypass -File .\demo.ps1 --modbus --seed
+```
+
+Simple rule:
+- default runs setup only
+- --seed adds sample ERP dataset tables
+- --modbus adds Modbus simulator
+- --modbus --seed runs everything
+
+Advanced setup-only with Modbus simulator:
+
+```bash
+ENABLE_MODBUS_SIM=1 ./demo.sh --setup
+```
+
+```powershell
+$env:ENABLE_MODBUS_SIM=1; powershell -ExecutionPolicy Bypass -File .\demo.ps1 --setup
+```
+
+This starts an opt-in simulator on localhost:1502.
+No Modbus connector or transform is auto-created in FairCom Edge.
+
+Factory-floor telemetry profile (default behavior):
+- 8 simulated assets by default (configurable with MODBUS_SIM_ASSET_COUNT)
+- Asset classes rotate across mixing tank, air compressor, conveyor drive, and cooling chiller
+- Per-asset state model: stopped, running, warning, alarm
+- Per-asset alarms are encoded as bit flags (overtemp, vibration, overcurrent, low/high pressure, stopped)
+- Full address map and bit decoding: [modbus-sim/modbus-sensor-map.md](modbus-sim/modbus-sensor-map.md)
+
+Register map per asset (12 holding/input registers):
+1. temperature_c x10
+2. vibration_mm_s x100
+3. current_a x10
+4. pressure_bar x100
+5. rpm
+6. load_pct x10
+7. energy_kw x10
+8. status_code (0 stopped, 1 running, 2 warning, 3 alarm)
+9. alarm_bits
+10. quality_pct x10
+11. runtime_min
+12. heartbeat
+
+Coils/discrete inputs per asset:
+- offset +0: run state flag
+- offset +1: alarm state flag
+
+### MCP-Driven Connector and Transform Workflow
+
+Goal: let AI use FairCom MCP to help configure FairCom Edge connectors and transforms against a known Modbus source.
+
+1. Start with the optional simulator enabled.
+2. In Claude Desktop, ask MCP to inspect current Edge configuration (connectors, pipelines, transforms).
+3. Ask MCP to create or update a Modbus connector targeting host modbus-sim and port 1502.
+4. Ask MCP to define a transform that maps incoming registers to a single target table/entity.
+5. Validate with MCP queries by checking row growth and sampled transformed values.
+
+Reference tutorials for connector and transform setup patterns:
+- https://documentation.faircom.com/en_US/edge-tutorials/faircom-edge-tutorials
 
 ## Claude Desktop Configuration
 
@@ -306,10 +397,11 @@ In Claude logs, we consistently observed:
 
 ## Repo Contents
 
-- demo.sh: Setup and seed automation for macOS/Linux
+- demo.sh: Setup and sample ERP dataset loader for macOS/Linux
 - demo.ps1: PowerShell entrypoint for Windows
 - demo.cmd: Windows Command Prompt launcher for demo.ps1
 - docker-compose.yml: FairCom Edge and FairCom MCP services
+- modbus-sim/modbus_telemetry_simulator.py: Optional simulated Modbus TCP telemetry source
 - examples/linux-mac/claude_desktop_config.json: Linux/macOS MCP server config sample
 - examples/claude_desktop_auto_approve.json: Optional preference mappings
 - examples/claude_desktop_full.json: Combined sample
